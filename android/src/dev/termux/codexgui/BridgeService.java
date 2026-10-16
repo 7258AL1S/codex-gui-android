@@ -164,7 +164,9 @@ public class BridgeService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                // 用自己的单色标记（`>_`）当状态栏小图标：小图标只吃 alpha，所以用主题化那层。
+                // 之前是系统自带的 stat_notify_sync，一眼看不出是哪个 App。
+                .setSmallIcon(R.drawable.ic_launcher_monochrome)
                 // 版本号放进标题：一眼就知道装的是哪一版，省得反复确认"这次更新生效了吗"
                 .setContentTitle(getString(R.string.notif_title) + " " + BridgeClient.versionName(this))
                 .setContentText(status)

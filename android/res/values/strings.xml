@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Codex</string>
+    <!-- 应用名带上 "GUI"：这是个第三方图形界面，不是 OpenAI 的官方应用；
+         名字与仓库/包名（dev.termux.codexgui）保持一致，也少一点"看起来像官方"的误会。 -->
+    <string name="app_name">Codex GUI</string>
     <string name="channel_name">Codex 运行状态</string>
     <string name="channel_description">桥与后台会话的运行状态。置顶通知可防止后台任务被系统回收。</string>
     <string name="notif_title">Codex</string>

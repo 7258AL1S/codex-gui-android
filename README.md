@@ -306,7 +306,7 @@ APK（WebView 壳 + 前台服务 + 置顶通知）
 | 目录 | 内容 |
 |---|---|
 | `app/` | 桥 `server.ts` + 前端 `public/` + 定时任务调度器 `automation-service.js`。派生自 codex-webui（MIT） |
-| `android/` | APK 源码（`MainActivity` / `BridgeService` / `BridgeClient`）+ 免 Gradle 的 `build.sh` |
+| `android/` | APK 源码（`MainActivity` / `BridgeService` / `BridgeClient`）+ 免 Gradle 的 `build.sh`；图标设计母版在 `android/design/icon-master.svg`（自适应图标三层资源在 `android/res/`） |
 | `bin/` | Termux 侧脚本（见第 5 步表格） |
 | `probe/` | 全部验证脚本（离线单测、DOM 级测试、真机端到端、以及"冻结监听"这类夹具） |
 | `patches/` | 前端改动的可重放补丁（幂等） |
@@ -338,6 +338,16 @@ APK（WebView 壳 + 前台服务 + 置顶通知）
 
 `docs/` 里的实测记录包含开发设备的机型、系统版本与本地路径；`probe/` 里的夹具都是合成数据。
 技术结论本身不依赖这些标识，介意的话发布前删改即可（自查清单见 `docs/PUBLISH-AUDIT.md`）。
+
+## 图标
+
+应用图标是**原创**的：深色渐变底 + 终端提示符 `>_`（青→蓝渐变描边），
+设计母版 `android/design/icon-master.svg`，另有自适应图标三层资源与五档位图兜底
+（`android/res/`，设计与取舍见 `docs/VERIFICATION.md` E142）。
+
+**刻意没有使用 Codex/ChatGPT 或任何厂商的 logo**：那属于对方的商标，把它当作第三方应用的图标
+会让人误以为存在官方关联，公开仓库尤其容易惹麻烦。如果你只在私人设备上自用、想换成别的图案，
+改 `android/design/icon-master.svg` 后按 E142 那段重新生成即可。
 
 ## 许可证
 

@@ -4970,3 +4970,49 @@ ok  相册里没有残留：/sdcard/Pictures/Codex/ 为空（预插记录已被�
 - `FileChooserParams` 在 Activity 里需要显式 import（匿名 `WebChromeClient` 内可直接解析，方法里不行）
   —— 编译期就报 `cannot find symbol`，没有静默。
 - 同一次改动还确认了 `bin/codex-gui` 里唯一一处硬编码家目录（发布前自查时发现，已改成 `$HOME`）。
+
+---
+
+## E142 — 应用图标：自适应图标 + 主题化单色层 + 通知栏小图标（APK 0.3.17，设计稿 0.3.18 复建）【真机验证（系统 UI 渲染）】
+
+原来的图标是一张 192×192 的 `res/drawable/ic_launcher.png`（`>_` 圆角方块），在 Android 12+ 上
+会被系统**当成普通位图再套一层圆角**——边上多一圈、看着糊。
+
+### 1. 设计（原创，刻意不用任何厂商 logo）
+
+用户建议"直接用 Codex 的图标"，**没有照做**：那是 OpenAI 的商标，而这个仓库是公开的，
+把厂商 logo 当自家应用图标是实打实的商标风险（可能被要求下架）。改成同气质但原创的记号：
+
+> 深色竖向渐变底（`#1B1B20 → #050507`）+ 终端提示符 **`>_`**，青→蓝渐变描边（`#5EEAD4 → #22D3EE`），
+> 圆头笔画、居中于安全区。
+
+设计母版是 `android/design/icon-master.svg`（带 `preview-sheet.png`，一眼能看 512/144/72/48 四种尺寸）。
+
+**第一版踩的坑**：SVG 里给两条笔画共用一个渐变，而 `_` 是**零高度**的横线 →
+`objectBoundingBox` 渐变在退化包围盒上无效，整条光标不可见。改成 `gradientUnits="userSpaceOnUse"`
+就正常了（这种错只有渲染出来看才发现）。
+
+### 2. Android 侧资源（minSdk 30 → 系统一定走自适应图标）
+
+| 文件 | 作用 |
+|---|---|
+| `res/mipmap-anydpi-v26/ic_launcher.xml`、`ic_launcher_round.xml` | **自适应图标**：背景+前景+单色三层 |
+| `res/drawable/ic_launcher_background.xml` | 渐变底色（用 `shape` 而不是 vector 内联渐变，避开旧 aapt 的兼容问题） |
+| `res/drawable/ic_launcher_foreground.xml` | 记号本体（108×108 画布，落在中央 66dp 安全区内） |
+| `res/drawable/ic_launcher_monochrome.xml` | **Android 13+ 主题化图标**用；同时被通知栏小图标复用 |
+| `res/mipmap-{m,h,x,xx,xxx}dpi/ic_launcher{,_round}.png` | 传统位图兜底（48/72/96/144/192） |
+| `BridgeService.java` | 状态栏小图标从系统自带的 `stat_notify_sync` 换成自己的单色 `>_` |
+| `strings.xml` | 应用名 `Codex` → **`Codex GUI`**（这是个第三方界面，名字别看着像官方应用） |
+
+### 3. 验证
+
+```
+ok  aapt dump badging：application-icon-{160,240,320,480} 全部指向 res/mipmap-anydpi-v26/ic_launcher.xml
+ok  application-label: 'Codex GUI'
+ok  aapt list：三种 drawable + 两组 anydpi-v26 + 五档 mipmap 都在 APK 里
+ok  真机「应用信息」页截图（shots/icon-appinfo.png）：圆角遮罩下居中、无裁剪、渐变正常
+ok  发布树 android/ 单独构建成功（0.3.18）—— 图标资源是自包含的
+```
+
+**没做**：把启动器桌面本身截下来看（那会把用户手机切到桌面）；用系统「应用信息」页 + `aapt`
+两处交叉确认渲染与打包。通知栏小图标只核对了资源与代码路径（翻用户通知栏不合适）。

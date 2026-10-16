@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1b20"/>
+      <stop offset="0.55" stop-color="#111114"/>
+      <stop offset="1" stop-color="#050507"/>
+    </linearGradient>
+    <!-- userSpaceOnUse：默认的 objectBoundingBox 在"零高度"的横线上会退化，
+         导致 `_` 光标整条不可见（这是 SVG 的经典坑，第一版就踩了）。 -->
+    <linearGradient id="glyph" gradientUnits="userSpaceOnUse" x1="30" y1="30" x2="82" y2="78">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 底：深色圆角方块（旧启动器用的自带形状；自适应图标那边只取渐变底色） -->
+  <rect x="2" y="2" width="104" height="104" rx="26" fill="url(#bg)"/>
+  <rect x="2" y="2" width="104" height="104" rx="26" fill="url(#sheen)"/>
+  <rect x="2.75" y="2.75" width="102.5" height="102.5" rx="25.25" fill="none"
+        stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+
+  <!-- 记号：终端提示符 >_ -->
+  <g fill="none" stroke="url(#glyph)" stroke-width="8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 36 L56 54 L34 72"/>
+    <path d="M61 72 L78 72"/>
+  </g>
+</svg>
