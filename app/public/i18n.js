@@ -833,3 +833,8 @@ Object.assign(ZH_CN, {
   "The run-command permission is not granted: every cold start will briefly switch to Termux.": "没有授予 run-command 权限：每次冷启动都会短暂切到 Termux。",
   "Startup self-check failed": "启动自检失败",
 });
+
+
+Object.assign(ZH_CN, {
+  "Could not open this file": "打不开这个文件",
+});

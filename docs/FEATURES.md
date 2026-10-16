@@ -77,6 +77,7 @@
 | 功能 | 桌面端形态 | 手机端交互 | 后端来源 | 类 | 状态 | 验收方法 | 限制与证据 |
 |---|---|---|---|---|---|---|---|
 | 命令卡片 | 命令+输出 | 折叠卡 | `ThreadItem.CommandExecution`（12 字段） | A | 协议已核实 | 命令、输出、退出码齐全 | 二进制 `CommandExecutionItem` |
+| 可点击文件 | 链接 | 侧栏文件面板 | 渲染层 `data-file-reference` + 桥 `/api/fs` | B | **已真机验证（E143）** | 点模型输出里的文件能打开 | E143：修掉三种都会"点了没反应"的形态——缺监听（带行号引用）、当下载处理（不带行号的绝对路径）、裸相对路径不认；现在点开就是侧栏文件查看器，打不开会 toast 出真实原因。**仍未真机触发**：APK 的 DownloadListener 与"外链交给系统"两条（代码+构建已过） |
 | 输出流式 | 实时 | 实时 | `CommandExecutionOutputDelta`、`ProcessOutputDelta` | A | 协议已核实 | 长命令输出逐段出现 | 二进制 |
 | 退出码/耗时 | 徽章 | 徽章 | `exit_code`、`started_at_ms`、`completed_at_ms` | A | 协议已核实 | 失败命令显示非 0 | 二进制字段 |
 | 文件改动卡 | diff | 卡片+抽屉 | `FileChangeOutputDelta`、`FileChangePatchUpdated` | A | 协议已核实 | 显示 `+/-` 统计 | 二进制 |

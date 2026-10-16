@@ -112,7 +112,41 @@ public class MainActivity extends Activity {
                 // 桥可能在页面加载中途被系统挂起：给出可操作的界面，而不是空白
                 showBootPanel(getString(R.string.boot_failed), true);
             }
+
+            /**
+             * 页面里的链接去向（E143）。
+             *
+             * 为什么必须写：WebView 默认会把所有导航都塞进自己 —— 页面里的外链会把整个应用
+             * 变成浏览器（回不来），而带 `download` 的链接更糟：**没有任何下载处理器**，
+             * 点了完全没反应（用户报的"点 .md 没反应"就有一条是这个）。
+             */
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request == null || !request.isForMainFrame()) return false;
+                String url = String.valueOf(request.getUrl());
+                if (url.startsWith(BridgeClient.BASE_URL)) return false;   // 我们自己的页面：留在壳里
+                if (url.startsWith("about:") || url.startsWith("blob:") || url.startsWith("data:")) return false;
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    BridgeClient.report("external link -> system: " + url);
+                } catch (Exception error) {
+                    BridgeClient.report("external link failed: " + url + " -> " + error);
+                }
+                return true;
+            }
         });
+
+        // 真有下载时交给系统（以前什么都没有：点了静默无反应）。
+        // 我们的下载地址是桥的 `/api/files/download?…`（loopback），系统浏览器取得到。
+        webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            BridgeClient.report("download requested: " + url);
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception error) {
+                BridgeClient.report("download open failed: " + url + " -> " + error);
+            }
+        });
+
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {

@@ -594,7 +594,7 @@ function refreshLocalizedRuntime(){
 }
 i18n.subscribe(refreshLocalizedRuntime);
 refreshLocalizedRuntime();
-$('#toggleSidePanel').onclick=()=>setSidePanelOpen($('#sidePanel').hidden);$('#toggleBottomPanel').onclick=()=>setBottomPanelOpen($('#bottomPanel').hidden);$('#closeBottomPanel').onclick=()=>setBottomPanelOpen(false);$('#toggleSidebar').onclick=()=>setSidebarOpen(mobileSidebarEnabled()?!$('#sidebar').classList.contains('mobile-open'):document.body.classList.contains('sidebar-hidden'));$('#closeSidePanel').onclick=()=>setSidePanelOpen(false);$('#closeSummaryPanel').onclick=()=>setSummaryPanelOpen(false);document.addEventListener('click',e=>{const target=e.target instanceof Element?e.target:null,image=target?.closest('[data-image-src]');if(image){e.preventDefault();openImageViewer(image.dataset.imageSrc,image.dataset.imageTitle||image.querySelector('img')?.alt||'Image',image.dataset.imagePath||'');return}if(target?.closest('a[data-file-download]'))return;const citation=target?.closest('a[data-file-reference]');if(!citation)return;e.preventDefault();dispatchEvent(new CustomEvent('codex-webui:file-reference',{detail:{path:citation.dataset.fileReference,lineStart:Number(citation.dataset.fileLineStart)||null,lineEnd:Number(citation.dataset.fileLineEnd)||null}}))});document.addEventListener('click',e=>{const path=e.composedPath();if(!path.includes($('#modelPicker')))closeModelMenu();if(!path.includes($('#permissionPicker')))closePermissionMenu();if(!path.includes($('#accountMenu'))&&!path.includes($('#accountButton')))toggleAccountMenu(false);if(!path.includes($('#sidebarSearchPanel'))&&!path.includes($('#sidebarSearchButton')))setSidebarSearchOpen(false);if(!path.includes($('#sidebarHelpMenu'))&&!path.includes($('#sidebarHelpButton')))setSidebarHelpOpen(false)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;scheduleThreadListRefresh(0);scheduleActiveThreadSync(0)});addEventListener('keydown',e=>{if(e.target instanceof Element&&e.target.closest('.terminal-host'))return;if(e.key==='Escape'){if($('#imageViewer').open){e.preventDefault();closeImageViewer();return}if($('#folderDialog').open||$('#fullAccessDialog').open)return;if(e.defaultPrevented)return;if(!$('#sidebarSearchPanel').hidden){e.preventDefault();setSidebarSearchOpen(false);return}if(!$('#sidebarHelpMenu').hidden){e.preventDefault();setSidebarHelpOpen(false);return}if($('#settingsDialog').open){e.preventDefault();closeSettings();return}closeModelMenu();closePermissionMenu();toggleAccountMenu(false);if(document.body.classList.contains('side-panel-open'))setSidePanelOpen(false);else if(document.body.classList.contains('summary-panel-open'))setSummaryPanelOpen(false)}if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();startNewTask()}if((e.metaKey||e.ctrlKey)&&e.key==='b'){e.preventDefault();$('#toggleSidebar').click()}if((e.metaKey||e.ctrlKey)&&e.key==='j'){e.preventDefault();$('#toggleBottomPanel').click()}});addEventListener('resize',()=>{syncOverlayPanelMode();syncSidebarLayout();for(const terminalState of Object.values(terminalStates))requestAnimationFrame(()=>fitTerminal(terminalState))});
+$('#toggleSidePanel').onclick=()=>setSidePanelOpen($('#sidePanel').hidden);$('#toggleBottomPanel').onclick=()=>setBottomPanelOpen($('#bottomPanel').hidden);$('#closeBottomPanel').onclick=()=>setBottomPanelOpen(false);$('#toggleSidebar').onclick=()=>setSidebarOpen(mobileSidebarEnabled()?!$('#sidebar').classList.contains('mobile-open'):document.body.classList.contains('sidebar-hidden'));$('#closeSidePanel').onclick=()=>setSidePanelOpen(false);$('#closeSummaryPanel').onclick=()=>setSummaryPanelOpen(false);document.addEventListener('click',e=>{const target=e.target instanceof Element?e.target:null,image=target?.closest('[data-image-src]');if(image){e.preventDefault();openImageViewer(image.dataset.imageSrc,image.dataset.imageTitle||image.querySelector('img')?.alt||'Image',image.dataset.imagePath||'');return}if(target?.closest('a[data-file-download]')){/* file-download link routed to the viewer（patches/0103）：放过它=点了没反应，所以也按打开处理 */}const citation=target?.closest('a[data-file-reference]');if(!citation)return;e.preventDefault();dispatchEvent(new CustomEvent('codex-webui:file-reference',{detail:{path:citation.dataset.fileReference,lineStart:Number(citation.dataset.fileLineStart)||null,lineEnd:Number(citation.dataset.fileLineEnd)||null}}))});document.addEventListener('click',e=>{const path=e.composedPath();if(!path.includes($('#modelPicker')))closeModelMenu();if(!path.includes($('#permissionPicker')))closePermissionMenu();if(!path.includes($('#accountMenu'))&&!path.includes($('#accountButton')))toggleAccountMenu(false);if(!path.includes($('#sidebarSearchPanel'))&&!path.includes($('#sidebarSearchButton')))setSidebarSearchOpen(false);if(!path.includes($('#sidebarHelpMenu'))&&!path.includes($('#sidebarHelpButton')))setSidebarHelpOpen(false)});document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;scheduleThreadListRefresh(0);scheduleActiveThreadSync(0)});addEventListener('keydown',e=>{if(e.target instanceof Element&&e.target.closest('.terminal-host'))return;if(e.key==='Escape'){if($('#imageViewer').open){e.preventDefault();closeImageViewer();return}if($('#folderDialog').open||$('#fullAccessDialog').open)return;if(e.defaultPrevented)return;if(!$('#sidebarSearchPanel').hidden){e.preventDefault();setSidebarSearchOpen(false);return}if(!$('#sidebarHelpMenu').hidden){e.preventDefault();setSidebarHelpOpen(false);return}if($('#settingsDialog').open){e.preventDefault();closeSettings();return}closeModelMenu();closePermissionMenu();toggleAccountMenu(false);if(document.body.classList.contains('side-panel-open'))setSidePanelOpen(false);else if(document.body.classList.contains('summary-panel-open'))setSummaryPanelOpen(false)}if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();startNewTask()}if((e.metaKey||e.ctrlKey)&&e.key==='b'){e.preventDefault();$('#toggleSidebar').click()}if((e.metaKey||e.ctrlKey)&&e.key==='j'){e.preventDefault();$('#toggleBottomPanel').click()}});addEventListener('resize',()=>{syncOverlayPanelMode();syncSidebarLayout();for(const terminalState of Object.values(terminalStates))requestAnimationFrame(()=>fitTerminal(terminalState))});
 globalThis.__codexWebuiDebug={notify:onNotification,request:onServerRequest,state,browserState,navigateBrowser,renderChanges,renderAccount,renderHeader,refreshComposerPlaceholder,setProjectless,openImageViewer,openThread,loadInitial,startNewTask,setSidebarOpen,openSettings,closeSettings,settingsRoutePage,selectedPermission,permissionThreadPolicy,permissionTurnPolicy,setPermissionMode,setPermissionProfiles,setPermissionVisibility,renderPermissionMenu,filterAppModels,renderModels,syncTurnSnapshot,recordTurnReview,scrollOpenedThreadToBottom};
 async function boot(){const savedProject=localStorage.getItem('codex-webui-project');syncSidebarLayout();syncPermissionControl();try{state.config=await fetch('/api/config').then(r=>r.json())}catch{}if(state.config.projectless||savedProject==='~')setProjectless();else setWorkspace(savedProject||state.config.defaultCwd||'.');refreshComposerPlaceholder();const initialSettingsPage=settingsRoutePage();if(initialSettingsPage)showSettings(initialSettingsPage,{updateRoute:false});connect()}
 boot();
@@ -1949,6 +1949,46 @@ async function searchFiles(query){
   renderFilesPanel();
 }
 
+// ---- 点模型输出里的文件引用（patches/0102）-----------------------------------
+// 之前这里缺了监听：渲染层生成的 `<a data-file-reference>` 被点击后只派发一个事件，
+// 没有任何人接，而点击处理器已经 preventDefault 了 —— 用户看到的就是"点了没反应"。
+function resolveFileReferencePath(rawPath,cwd){
+  const value=String(rawPath||'').trim();
+  if(!value)return '';
+  if(value.startsWith('~/'))return String(state.config?.home||'').replace(/\/$/,'')+'/'+value.slice(2);
+  if(value.startsWith('/'))return value;
+  const base=String(cwd||'').replace(/\/$/,'');
+  if(!base)return value;
+  // 相对路径里可能有 ./ 前缀，交给桥那边的路径解析去规范化，这里只负责拼出绝对路径
+  return base+(value.startsWith('./')?value.slice(1):'/'+value);
+}
+async function openFileReference(reference){
+  const raw=String(reference?.path||'').trim();
+  if(!raw){clientLog('file reference: empty path, ignored');return}
+  const cwd=filesWorkspaceRoot();
+  const target=resolveFileReferencePath(raw,cwd);
+  clientLog('file reference click: '+raw+' -> '+target);
+  openFilesPanel();
+  try{
+    await openFilesFile(target);
+    if(filesState.notice)throw new Error(filesState.notice);
+    const lineStart=Number(reference?.lineStart)||0;
+    const lineEnd=Number(reference?.lineEnd)||0;
+    if(lineStart>0){
+      const name=$('#filesViewerName');
+      if(name)name.textContent=shortPath(target)+(lineEnd&&lineEnd!==lineStart?': '+lineStart+'-'+lineEnd:': '+lineStart);
+      // 文本查看器是个滚动容器：按行号比例滚过去就够了（精确到行的排版依赖字体，不值当）。
+      const viewer=$('#filesViewerText');
+      const total=String(filesState.open?.text||'').split('\n').length;
+      if(viewer&&total>1)viewer.scrollTop=Math.max(0,(lineStart-1)/(total-1)*(viewer.scrollHeight-viewer.clientHeight));
+    }
+  }catch(error){
+    const detail=(error&&error.message)||String(error);
+    clientLog('file reference FAILED: '+target+' -> '+detail);
+    toast(t('Could not open this file')+': '+detail,9000);
+  }
+}
+addEventListener('codex-webui:file-reference',function(event){void openFileReference(event.detail||{})});
 function openFilesPanel(){
   const tab=$('#utilityTab');
   if(tab){tab.textContent=t('Files');tab.dataset.sidePanelTab='files';tab.hidden=false}

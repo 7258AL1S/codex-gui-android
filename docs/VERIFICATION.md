@@ -5016,3 +5016,62 @@ ok  发布树 android/ 单独构建成功（0.3.18）—— 图标资源是自�
 
 **没做**：把启动器桌面本身截下来看（那会把用户手机切到桌面）；用系统「应用信息」页 + `aapt`
 两处交叉确认渲染与打包。通知栏小图标只核对了资源与代码路径（翻用户通知栏不合适）。
+
+---
+
+## E143 — 点模型输出里的文件（.md）没反应：三种形态全挂，逐一堵上（patches/0102、0103 + APK 0.3.20）【真机验证】
+
+用户报："我在 codex 应用里点它给我输出的 .md 文件，没有反应。"
+
+### 1. 根因：三种链接形态各自坏在不同地方
+
+| 形态（模型输出） | 渲染成什么 | 点了会怎样 | 定位 |
+|---|---|---|---|
+| `[x.md](/abs/path.md:12)`（带行号） | `<a data-file-reference>` | 点击处理器 `preventDefault()` 后**派发 `codex-webui:file-reference` 事件 —— 全前端没有任何监听者** → 什么都不发生 | **patches/0102** 补监听 |
+| `[x.md](/abs/path.md)`（不带行号） | `<a data-file-download download>` | 点击处理器**放行**（当下载），而 APK 的 WebView **没有 DownloadListener** → 静默无反应 | **patches/0103** 改渲染 + 点击处理器；APK 侧补 `setDownloadListener` |
+| `[x.md](docs/x.md)`（**裸相对路径**） | 普通 `<a href="docs/x.md">` | `parseFileReference` 只认 `/`、`~/`、`./`、`../`、`C:\` 开头 → 这种**不是引用**，点了会去导航 `http://127.0.0.1:8899/docs/x.md`（404），整个应用像被"点坏" | **patches/0103** 扩展 `parseFileReference` |
+
+值得一提的是：**以前只测到"`<a>` 生成出来了"**（渲染层确实生成了引用），没测"点了之后发生什么"——
+所以这个 bug 一直没被发现。这次补的测试专门跑整条链。
+
+### 2. 改法
+
+| 位置 | 改动 |
+|---|---|
+| `public/app.js`（0102） | 补上缺失的监听：`resolveFileReferencePath()` 负责绝对路径 / `~/` / 相对路径按会话 cwd 拼接；打开方式复用侧栏 **Files 面板**（`openFilesPanel()` + `openFilesFile()`）；**打不开就把桥返回的真实原因 toast 出来并写进桥日志**，不静默；有行号时标题标 `: 12-18` 并按比例滚到附近 |
+| `public/rendering.js`（0103） | 本地路径**一律**渲染成 `data-file-reference`（不再给 `download` 链接——查看器里本来就有下载/分享/打开按钮，E128）；`parseFileReference` 接受**文件形状的裸相对路径**（要求最后一段带扩展名，避免把 `settings`、`page/2` 这种路由当文件） |
+| `public/app.js`（0103） | `a[data-file-download]` 不再放行，也按"打开文件"处理（兜住旧页面/别的来源产生的标记） |
+| APK（0.3.20） | `setDownloadListener`：真有下载就交给系统（以前什么都没接 → 静默）；`shouldOverrideUrlLoading`：非本机 URL 交给系统浏览器打开（以前会把整个应用变成浏览器，回不来） |
+
+### 3. 验证
+
+`probe/file-reference-click.test.mjs`（**14 项全过**，跑的是**真实**的点击处理器 + 监听器 + 渲染器）：
+
+```
+ok  点绝对路径会打开侧栏文件面板 / 并且真的去读那个文件
+ok  相对路径按 cwd 拼成绝对路径        ok  ~/ 会展开成家目录
+ok  引用带行号时标题标出范围
+ok  读失败时把桥返回的真实原因 toast 出来 / 失败也写进桥日志
+ok  空路径被安全忽略（不打开面板也不报错）
+ok  不带行号的本地 Markdown 链接 → data-file-reference（并且不再是 data-file-download）
+ok  带行号的链接 → 引用 + 行号        ok  绝对路径也是引用
+ok  外链仍是外链（不当成文件引用）
+```
+
+**真机验证**（`adb` 深链打开一条含 `[PLAN.md](PLAN.md)` 的会话，点击后）：
+
+```
+client: file reference click: /data/data/com.termux/files/home/codex-gui/PLAN.md -> …PLAN.md
+client: side panel view=files title=文件 … files(active)=文件
+client: fs list -> 200
+client: fs read -> 200
+```
+
+截图 `~/shots/ref-click-test2.png`：文件面板里正显示 `PLAN.md` 的内容（含查看器的编辑/分享/打开/下载按钮）✓。
+
+### 4. 如实标注
+
+- APK 侧那两处（DownloadListener、外链交给系统）是**代码 + 构建 + 安装**验证，**没有真机触发过**
+  （需要一条真正的下载链接或外链；我不想在你手机上乱点陌生链接）。改动本身很小且只影响"原本什么都不发生"的场景。
+- 裸相对路径的判定是**启发式**：要求最后一段带扩展名。所以 `[x](README.md)` 会当文件，
+  而 `[x](settings)` 仍按普通链接处理（那更像路由）。边界在探测里写明了。

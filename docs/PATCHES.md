@@ -714,6 +714,16 @@ App 的 boot 从 `ready after 14s/23s` → **`ready after 1s`**。连续 3 次�
 > 关键认识：这个尾延迟的根因**不在 APK 的探测频率**，而在 Termux 侧的启动脚本
 > —— 它对着"冻住的监听"照样去 `spawn`，然后 `Failed to start server. Is port 8899 in use?` 白等一轮。
 
+## 0102–0103 — 点模型输出里的文件：三种形态全挂，一并修掉（E143）
+
+| 补丁 | 内容 | 验证 |
+|---|---|---|
+| 0102 | 补上**缺失的监听**：`codex-webui:file-reference` 事件本来没人接（点击处理器已经 `preventDefault()`，所以点了完全没反应）。新增 `resolveFileReferencePath()`（绝对 / `~/` / 相对路径按 cwd）与 `openFileReference()`：复用侧栏 Files 面板打开、失败 toast 真实原因并写桥日志、带行号时标题标范围并滚到附近 | `probe/file-reference-click.test.mjs` 跑**真实**点击处理器 + 监听器：绝对/相对/`~/` 路径解析、失败可见、空路径安全 |
+| 0103 | ① 不本地路径一律渲染成 `data-file-reference`（原来不带行号的会变成 `download` 链接，而 APK 没有 DownloadListener → 静默）；② `parseFileReference` 接受**文件形状的裸相对路径**（原来只认 `/`、`~/`、`./`、`../`，模型最常输出的 `docs/PLAN.md` 反而变成普通链接 → 点了导航到 404）；③ 点击处理器对 `data-file-download` 也按"打开文件"处理 | 同一探针 **14 项全过**（含"外链仍是外链""不再生成 file-download"）；**真机**：点 `PLAN.md` → `file reference click … → fs read 200`，文件面板显示内容（`~/shots/ref-click-test2.png`） |
+
+APK 侧（0.3.20，不在前端补丁序列里）：`setDownloadListener` 与 `shouldOverrideUrlLoading`
+——以前下载和外链都是"静默无反应/把应用变成浏览器"，现在分别交给系统处理。**代码+构建验证，未真机触发**。
+
 ## 0101 — 设置 → 配置页的「启动自检」（P9 首次配置引导，E139）
 
 | 补丁 | 内容 | 验证 |

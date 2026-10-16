@@ -43,7 +43,11 @@ export function parseFileReference(href = "") {
   const value = decodeAttribute(href);
   if (!value || /^(?:https?:|mailto:|#)/i.test(value)) return null;
   const path = value.replace(/^file:\/\//i, "").replace(/^sandbox:/i, "");
-  const match = path.match(/^((?:\/|~\/|\.{1,2}\/|[A-Za-z]:[\\/])[^?#]*?)(?::(\d+)(?:-(\d+))?)?$/);
+  // 裸相对路径（`docs/PLAN.md`、`src/server.ts`）也算文件引用 —— 模型输出里最常见的就是这种。
+  // 但不能什么相对字符串都当路径（`settings`、`page/2` 是路由不是文件），所以要求
+  // "最后一段带扩展名"且不含空格/查询串；写文件时大小写、数字、连字符都允许。
+  const relativeFile = /^(?![a-z][a-z0-9+.-]*:)([A-Za-z0-9._~%+=@-]+(?:\/[A-Za-z0-9._~%+=@-]+)*\.[A-Za-z0-9]{1,12})(?::(\d+)(?:-(\d+))?)?$/i.exec(path);
+  const match = relativeFile || path.match(/^((?:\/|~\/|\.{1,2}\/|[A-Za-z]:[\\/])[^?#]*?)(?::(\d+)(?:-(\d+))?)?$/);
   if (!match) return null;
   return {
     path: match[1],
@@ -137,9 +141,11 @@ function renderFileReference(reference, label, cwd) {
     const title = `View ${reference.path}${suffix}`;
     return `<a class="file-citation image-citation" href="#file-reference" data-file-reference="${escapeHtml(reference.path)}" data-image-src="${escapeHtml(localImageUrl(reference.path, cwd))}" data-image-title="${escapeHtml(imageTitle(reference.path))}" data-image-path="${escapeHtml(reference.path)}"${reference.lineStart == null ? "" : ` data-file-line-start="${reference.lineStart}"`}${reference.lineEnd == null ? "" : ` data-file-line-end="${reference.lineEnd}"`} title="${escapeHtml(title)}">${label}</a>`;
   }
+  // file-links-open-in-app（patches/0103）：本地路径一律当"打开"，不再直接给下载链接。
+  // 原因：带 download 的链接在 APK 的 WebView 里没人处理（没有 DownloadListener），
+  // 点了完全没反应；而查看器里本来就有「下载」「分享」「打开」按钮，能力一点没少。
   if (reference.lineStart == null) {
-    const filename = imageTitle(reference.path);
-    return `<a class="file-citation file-download" href="${escapeHtml(localDownloadUrl(reference.path, cwd))}" data-file-download="${escapeHtml(reference.path)}" download="${escapeHtml(filename)}" title="${escapeHtml(`Download ${reference.path}`)}">${label}</a>`;
+    return `<a class="file-citation" href="#file-reference" data-file-reference="${escapeHtml(reference.path)}" title="${escapeHtml(`Open ${reference.path}`)}">${label}</a>`;
   }
   const title = `Open ${reference.path}${suffix}`;
   return `<a class="file-citation" href="#file-reference" data-file-reference="${escapeHtml(reference.path)}" data-file-line-start="${reference.lineStart}"${reference.lineEnd == null ? "" : ` data-file-line-end="${reference.lineEnd}"`} title="${escapeHtml(title)}">${label}</a>`;
