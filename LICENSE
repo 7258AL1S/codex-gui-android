@@ -19,15 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-## Third-party
-
-`app/` is derived from **codex-webui** (MIT) — its license and third-party notices are kept
-verbatim at `app/LICENSE` and `app/THIRD_PARTY_NOTICES.md` (icon path data from Lucide,
-fonts, and bundled frontend dependencies are listed there).
-
-`proto-ts/` contains TypeScript types generated from the locally installed Codex CLI's
-`app-server` (`--experimental` type export). They are included as the protocol baseline that
-`docs/FEATURES.md` and `docs/VERIFICATION.md` cite; they are not hand-written source.
