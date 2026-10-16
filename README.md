@@ -341,5 +341,14 @@ APK（WebView 壳 + 前台服务 + 置顶通知）
 
 ## 许可证
 
-本项目以 MIT 发布（见 `LICENSE`）。`app/` 派生自 codex-webui，其 MIT 许可证与第三方声明
-保留在 `app/LICENSE`、`app/THIRD_PARTY_NOTICES.md`。
+本项目**自己的代码以 Apache-2.0 发布**（见 `LICENSE`、`NOTICE.md`）。上游关系分两块，别混：
+
+- **`proto-ts/`** 是由你本机 Codex CLI `app-server` 导出的类型 → 来自
+  [openai/codex](https://github.com/openai/codex)（**Apache-2.0**，且带 NOTICE）。
+  按 Apache-2.0 §4(d) 的要求，它的 NOTICE 原文已逐字复制到本仓库 `NOTICE.md` 第 1 节。
+  本仓库**不分发 Codex CLI 本身**，只与你自己装的那份通信。
+- **`app/`** 派生自 **codex-webui（MIT）** → 那部分继续按 MIT 走，许可证原文保留在
+  `app/LICENSE`、`app/THIRD_PARTY_NOTICES.md`。把 `app/` 再分发时这两份文件不能删。
+
+所以如果你要基于本项目做二次分发：本项目代码遵守 Apache-2.0；`app/` 里的派生部分遵守 MIT
+（两者兼容，MIT 部分保留声明即可）。

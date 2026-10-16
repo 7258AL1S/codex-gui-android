@@ -34,7 +34,8 @@
 |---|---|
 | 1050 个文件、9.2 MB（最大单文件是生成的前端 bundle 1.7 MB） | ✓ 适合 git |
 | `README.md` 里的架构图 / 目录表 / 快速开始 / 已知限制 | ✓ 与实际树一致 |
-| `LICENSE`（MIT）+ 上游 `app/LICENSE` + `app/THIRD_PARTY_NOTICES.md`（Lucide 等） | ✓ 都在 |
+| `LICENSE`（**Apache-2.0**，本项目自己的代码）+ `NOTICE.md`（含 **openai/codex 的 NOTICE 原文**，因为 `proto-ts/` 由它的 app-server 导出）+ 上游 `app/LICENSE`（MIT，codex-webui）+ `app/THIRD_PARTY_NOTICES.md`（Lucide 等） | ✓ 都在 |
+| 许可证的**归属边界** | 本项目代码 Apache-2.0；`app/` 的派生部分仍是 MIT（MIT 原文保留，不被 Apache 覆盖）；不分发 Codex CLI 本身 |
 | `proto-ts/` 的来源（本机 CLI 导出） | ✓ 在 `LICENSE` 末尾与 `README` 里写明 |
 | `docs/` 里引用的截图（`~/shots/*.png`）**不在仓库里** | 已声明为"证据引用"；如需公开可另行挑选去隐私的图 |
 | `bin/` 脚本的家目录 | 已把仅剩的一处硬编码改成 `$HOME` |
