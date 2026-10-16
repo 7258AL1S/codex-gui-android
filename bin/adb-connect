@@ -1,0 +1,56 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# 自动把 adb 接到本机的无线调试端口。
+#
+# 为什么需要它：无线调试的**端口每次重开都会变**，而 adb 连到旧端口的表现是
+# "offline" 或 "device not found"——排查时很容易以为是别的问题（我被这个坑过一次）。
+# 这个脚本扫回环端口、逐个 connect，只认最终状态是 `device` 的那个，并把它打印出来。
+#
+#   adb-connect          # 扫描并连接；成功时输出端口号（形如 127.0.0.1:35895）
+#   adb-connect -q       # 只输出端口（给 $(...) 用）
+set -uo pipefail
+
+ADB="$HOME/bin/adb"
+TMP_SCAN="${TMPDIR:-$PREFIX/tmp}/adb-port-scan.mjs"
+
+cat > "$TMP_SCAN" <<'EOF'
+import net from "node:net";
+const START = 30000, END = 65535, CONC = 400, TIMEOUT = 400;
+const skip = new Set([8899, 8765, 8901, 8902, 8897, 5037]);
+const open = [];
+let next = START;
+function probe(port) {
+  return new Promise((resolve) => {
+    const s = net.connect({ host: "127.0.0.1", port });
+    let settled = false;
+    const finish = (ok) => { if (settled) return; settled = true; s.destroy(); resolve(ok); };
+    s.setTimeout(TIMEOUT);
+    s.on("connect", () => finish(true));
+    s.on("error", () => finish(false));
+    s.on("timeout", () => finish(false));
+  });
+}
+async function worker() {
+  while (next <= END) {
+    const port = next++;
+    if (skip.has(port)) continue;
+    if (await probe(port)) open.push(port);
+  }
+}
+await Promise.all(Array.from({ length: CONC }, worker));
+console.log(open.sort((a, b) => a - b).join(" "));
+EOF
+
+ports="$(timeout 90 node "$TMP_SCAN" 2>/dev/null)"
+for port in $ports; do
+  "$ADB" connect "127.0.0.1:$port" >/dev/null 2>&1
+done
+sleep 1
+for port in $ports; do
+  if "$ADB" devices | grep -q "127.0.0.1:$port[[:space:]]*device"; then
+    printf '127.0.0.1:%s\n' "$port"
+    exit 0
+  fi
+done
+printf '扫描到的端口：%s\n' "${ports:-（无）}" >&2
+"$ADB" devices >&2
+exit 1

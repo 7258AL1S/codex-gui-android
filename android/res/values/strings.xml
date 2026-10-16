@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Codex</string>
+    <string name="channel_name">Codex 运行状态</string>
+    <string name="channel_description">桥与后台会话的运行状态。置顶通知可防止后台任务被系统回收。</string>
+    <string name="notif_title">Codex</string>
+    <string name="notif_bridge_ready">桥已连接</string>
+    <string name="notif_bridge_starting">正在启动桥…</string>
+    <string name="notif_bridge_missing">桥没有响应，正在尝试拉起 Termux 里的桥</string>
+    <string name="action_reload">重新加载</string>
+    <string name="action_restart">重启桥</string>
+    <string name="action_termux">打开 Termux</string>
+    <string name="choose_file">选择文件</string>
+    <string name="booting">正在启动桥…</string>
+    <string name="boot_failed">桥没有起来。检查 Termux 是否装了 termux-api、是否允许外部应用执行命令；如果 Termux 刚被系统清理过，打开一次 Termux 再回到这里（应用已经自动尝试唤醒过它）。</string>
+    <string name="retry">重试</string>
+    <string name="open_termux">打开 Termux</string>
+    <string name="open_app_settings">打开本应用设置</string>
+    <string name="need_run_command">缺少 Termux 的「Run command」权限：请在本应用设置里授予，或在应用信息 → 权限里打开。</string>
+    <string name="need_run_command_banner">缺 Termux「Run command」权限：桥没在跑时应用无法自动拉起它。点这里去授予。</string>
+    <string name="no_termux_banner">没有检测到 Termux：Codex 后端需要在 Termux 里运行（~/bin/codex-gui-web）。</string>
+    <string name="app_channel_name">Codex 提醒</string>
+    <string name="app_channel_description">任务完成、需要确认等提醒由应用自己发出（不再依赖 Termux 通知）。</string>
+    <string name="grant_run_command">授予 Termux「Run command」权限（之后启动桥不再跳转 Termux）</string>
+    <string name="booting_switching_to_termux">桥没在运行，正在请 Termux 启动它——会短暂切到 Termux（授予 Run command 权限后不再跳转）…</string>
+    <string name="booting_waking_termux">桥没有响应（Termux 被系统冻结时就是这种表现），正在把它切到前台解冻并重新启动…</string>
+    <string name="booting_waiting_termux">（桥没有任何应答，正在等 Termux 执行启动命令）</string>
+    <string name="booting_waiting_appserver">（桥已应答，正在等 app-server）</string>
+    <string name="boot_ready_title">Codex 已经就绪</string>
+    <string name="boot_ready_body">刚刚唤醒了 Termux；点这里回到应用。</string>
+</resources>

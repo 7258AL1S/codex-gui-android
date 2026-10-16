@@ -1,0 +1,42 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Codex GUI 看门狗（由 termux-job-scheduler 每 15 分钟调用一次）
+#
+# 为什么需要它（2026-10-15 实测，见 VERIFICATION.md E99）：
+#   - 桥只要**没有**持有 termux-wake-lock，浏览器在前台时整个 Termux 会被系统挂起
+#     20–60 秒，页面就停在「等待桥响应」；
+#   - 持有时实测 90 秒 0 卡顿（2 秒采样器 42/42 拍、`sleep 80` 漂移 0s）；
+#   - 但唤醒锁会在桥重启时被 `codex-gui-web stop` 释放，而新实例那次 `termux-wake-lock`
+#     如果失败（Termux:API 正在重启等）是**静默**的 —— 这就是 23:10 那次重启后
+#     连续 73 次挂起的来源。
+#
+# 因此每 15 分钟做两件幂等的事：补唤醒锁；桥不在就拉起来。
+# 卸载：termux-job-scheduler --cancel-all（或 --cancel --job-id 4711）
+set -uo pipefail
+
+STATE_DIR="$HOME/.codex/codex-webui"
+LOG_FILE="$STATE_DIR/watchdog.log"
+URL="${CODEX_GUI_URL:-http://127.0.0.1:8899}"
+
+mkdir -p "$STATE_DIR"
+
+# 只保留最近 200 行，免得日志无限增长
+[ -f "$LOG_FILE" ] && tail -n 200 "$LOG_FILE" > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+
+stamp() { date '+%Y-%m-%d %H:%M:%S'; }
+
+# 1) 唤醒锁（幂等）
+if termux-wake-lock 2>/dev/null; then
+  echo "$(stamp) wake-lock ok" >> "$LOG_FILE"
+else
+  echo "$(stamp) wake-lock FAILED (termux-api?)" >> "$LOG_FILE"
+fi
+
+# 2) 桥活着吗（ready 才算活着：ok=true 但 app-server 还没接上不算）
+if curl -s -m 5 "$URL/api/health" | grep -q '"ready":true'; then
+  echo "$(stamp) bridge ready" >> "$LOG_FILE"
+  exit 0
+fi
+
+echo "$(stamp) bridge not ready — starting" >> "$LOG_FILE"
+"$HOME/bin/codex-gui-web" start >> "$LOG_FILE" 2>&1
+exit 0

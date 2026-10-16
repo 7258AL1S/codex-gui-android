@@ -1,0 +1,28 @@
+# 依赖与构建产物
+node_modules/
+app/node_modules/
+android/build/
+android/obj/
+android/gen/
+*.apk
+*.aab
+
+# 运行期状态与日志（桥/看门狗/定时任务都在 Termux 侧，不进仓库）
+*.log
+tmp/
+app/tmp/
+
+# 凭据与本地配置
+*.keystore
+*.jks
+.env
+!.env.example
+*-token
+ws-token
+
+# 编辑器/系统
+.DS_Store
+*.swp
+
+# 上游快照（codex-webui 源码 tar，仓库里不需要）
+cw.tar.gz

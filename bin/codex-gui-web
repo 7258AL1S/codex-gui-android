@@ -1,0 +1,336 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Codex 手机 GUI（WebUI 形态）控制台
+#
+#   codex-gui-web start     后台启动桥（脱离当前终端）
+#   codex-gui-web stop      停止桥（并清理残留的 app-server）
+#   codex-gui-web restart
+#   codex-gui-web status    运行状态与地址
+#   codex-gui-web log [-f]  看日志
+#   codex-gui-web url       只打印地址
+#
+# 存活边界（2026-10-14 实测重写）：
+#   - 桥用 setsid 起在独立会话里；关掉终端、退出当前 Termux 会话不会带走它。
+#   - **不持唤醒锁时，只要你在浏览器前台用这个页面，Termux 进程就会被 HyperOS 冻结**，
+#     桥这段时间完全不响应：页面加载要等几十秒到几分钟、"127.0.0.1 拒绝连接"、
+#     点了发送/选择文件没有任何反应、日志里的 client 行成串地晚到。
+#     实测（E87，同一台手机）：
+#       不持锁：`sleep 45` 实际跑了 585 秒（漂移 +540s），采样器 2s 一次全部丢拍；
+#       持锁  ：`sleep 40` 跑了 40 秒（漂移 0s），采样器 28 拍 0 丢拍。
+#     所以 start/stop 会成对地取/放 `termux-wake-lock`（会在通知栏留一条 Termux 通知，
+#     这是 Android 的机制，不是本脚本加的常驻服务）。不想留通知就 `termux-wake-unlock`，
+#     代价是回到上面那串症状。
+#   - 把 Termux 从最近任务里划走，系统仍可能杀掉整个应用进程树（那是另一回事）。
+#
+# CLI 接入同一个 app-server（与网页共享实时状态）：
+#   codex-gui                 # 打开 CLI
+#   codex-gui resume <threadId>
+#
+# 实现备注（踩过的坑，别改回去）：
+#   - 不靠 `$!` 记 PID：setsid 会先 fork、bun run 也可能再 exec，记下来的常常是
+#     已经退出的中间进程（实测 status 因此误报"未运行"）。改成按「进程 cwd == 本项目
+#     app 目录」发现桥进程。
+#   - `pgrep -f` 会匹配到调用方自己的命令行，曾把调用它的 shell 一起杀掉（exit 143）。
+#     一律排除 $$ 与 $PPID。
+set -uo pipefail
+
+APP_DIR="$HOME/codex-gui/app"
+STATE_DIR="$HOME/.codex/codex-webui"
+LOG_FILE="$STATE_DIR/bridge.log"
+BUN=/data/data/com.termux/files/usr/bin/bun
+HOST_ADDR="${CODEX_GUI_HOST:-127.0.0.1}"
+PORT="${CODEX_GUI_PORT:-8899}"
+WS_PORT=$((PORT + 2))
+URL="http://${HOST_ADDR}:${PORT}"
+
+mkdir -p "$STATE_DIR"
+
+# --- 启动单飞锁（2026-10-16）---------------------------------------------------
+# 有三个来源会同时喊"把桥拉起来"：
+#   ① App 的前台服务每 60 秒检查一次 ready，不在就 RUN_COMMAND 拉一次；
+#   ② ~/.bashrc 里每个新 shell 都会后台跑一次 `codex-gui-web start`；
+#   ③ 用户/我手动敲 start/restart。
+# 没有锁时它们会各自 spawn 一个桥：两个桥抢 8901 端口，后到的那个 app-server
+# 撞 "Address already in use"，桥的兜底逻辑又把**对方正在用的** app-server 杀掉重试，
+# 一来一回十几秒——用户看到的就是"启动桥很慢，一直等待"（E124 实测）。
+LOCK_DIR="$STATE_DIR/start-lock"
+
+lock_start() {
+  local waited=0
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    # 我们已经持有它（restart 会先持锁再调 start）——直接算成功，别自己等自己。
+    if [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$$" ]; then
+      return 0
+    fi
+    # 陈旧锁（>2 分钟）清掉：一次崩溃不该把"启动"永久卡死。
+    if [ -n "$(find "$LOCK_DIR" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then
+      rmdir "$LOCK_DIR" 2>/dev/null
+      continue
+    fi
+    [ "$waited" -ge 60 ] && return 1
+    sleep 1
+    waited=$((waited + 1))
+  done
+  printf '%s\n' "$$" >"$LOCK_DIR/pid" 2>/dev/null || true
+  return 0
+}
+
+unlock_start() {
+  # 只释放自己的锁：restart 持锁期间调用的 start 不能把它解掉。
+  if [ -f "$LOCK_DIR/pid" ] && [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" != "$$" ]; then
+    return 0
+  fi
+  rm -f "$LOCK_DIR/pid" 2>/dev/null
+  rmdir "$LOCK_DIR" 2>/dev/null
+}
+
+bridge_pids() {
+  local pid cwd
+  for pid in $(pgrep -f "server\.ts" 2>/dev/null); do
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null)"
+    [ "$cwd" = "$APP_DIR" ] || continue
+    printf '%s\n' "$pid"
+  done
+}
+
+stray_app_servers() {
+  local pid
+  for pid in $(pgrep -f "app-server --listen ws://127\.0\.0\.1:${WS_PORT}" 2>/dev/null); do
+    [ "$pid" = "$$" ] && continue
+    [ "$pid" = "$PPID" ] && continue
+    printf '%s\n' "$pid"
+  done
+}
+
+health_ok() {
+  # `ready` (not `ok`) means the app-server is attached: right after a restart the HTTP
+  # server answers while nothing can be done yet.
+  #
+  # curl first, because the previous version spawned `bun -e` per attempt: with a 25×1s
+  # wait loop on a loaded phone that turned a trivial "start" into ~170 seconds (measured
+  # 2026-10-15 23:33 — the command simply sat there). curl is 3 ms.
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -m 2 "$URL/api/health" 2>/dev/null | grep -q '"ready":true'
+    return $?
+  fi
+  "$BUN" -e '
+    const t = setTimeout(() => process.exit(1), 1500);
+    fetch(process.argv[1] + "/api/health").then((r) => r.json())
+      .then((j) => { clearTimeout(t); process.exit(j && j.ready ? 0 : 1); })
+      .catch(() => process.exit(1));
+  ' "$URL" >/dev/null 2>&1
+}
+
+# 唤醒锁是"桥能不能被调度"的开关（E99 实测：持有 90 秒 0 卡顿；丢失时浏览器前台
+# 会整台设备把 Termux 挂起 20–60 秒）。它在 `stop` 时会被释放，而重启后重新获取
+# 一旦失败是静默的 —— 所以这里重试两次并把结果打出来，任何调用 start 的路径都会修好它。
+hold_wake_lock() {
+  local attempt
+  command -v termux-wake-lock >/dev/null 2>&1 || {
+    printf '警告：没有 termux-wake-lock（未装 termux-api？），浏览器前台使用时可能被系统挂起\n' >&2
+    return 1
+  }
+  for attempt in 1 2; do
+    # Termux:API 调用可能卡住（应用正在重启时），所以给它一个上限，别把 start 拖住。
+    if timeout 10 termux-wake-lock >/dev/null 2>&1; then
+      printf '唤醒锁：已持有\n'
+      return 0
+    fi
+    sleep 1
+  done
+  printf '警告：termux-wake-lock 连续两次失败，桥可能在前台浏览器使用时被系统挂起\n' >&2
+  return 1
+}
+
+cmd_start() {
+  local pids waited=0
+  pids="$(bridge_pids)"
+  if [ -n "$pids" ]; then
+    # Do NOT kill a bridge that is merely still coming up. Right after a restart
+    # the process exists while /api/health is not ready yet, and the auto-start in
+    # .bashrc runs on every shell — killing on that transient made the bridge flap
+    # (observed: two starts 22 seconds apart, which is what the browser hit).
+    # Wait for readiness first; only treat it as wedged after that.
+    # 但有一种情况不必等：**端口有人在 listen 却完全不应答**（curl 退出码 28）——
+    # 那是"被冻结的监听"，不是"还在启动"（还在启动的桥此刻根本没绑上端口，curl 会给 7=连接被拒）。
+    # 实测（E140）：等满 25 秒 + 重启，让一次恢复从 ~10 秒变成 ~78 秒。
+    curl -s -m 3 -o /dev/null "$URL/api/health" 2>/dev/null
+    if [ "$?" = 28 ]; then
+      printf '端口 %s 有人在 listen 但完全不应答（冻住的旧桥），跳过等待直接重启\n' "$PORT"
+      echo "$(date '+%Y-%m-%d %H:%M:%S') port $PORT answers nothing (curl exit 28) — treating the existing bridge as wedged" >>"$LOG_FILE"
+      waited=25
+    fi
+    while [ "$waited" -lt 25 ]; do
+      if health_ok; then
+        # 早期的 return 路径也要补锁：脚本被重复调用时，这往往是唯一"顺手修好"的机会。
+        hold_wake_lock
+        printf '已经在跑（pid %s）\n%s\n' "$(echo "$pids" | tr '\n' ' ')" "$URL"
+        return 0
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    printf '进程在但 %s 秒内仍未就绪，才判定为卡死并重启\n' "$waited"
+    cmd_stop >/dev/null 2>&1
+  fi
+
+  [ -f "$APP_DIR/server.ts" ] || { printf '找不到 %s\n' "$APP_DIR/server.ts" >&2; return 1; }
+
+  # 单飞：拿不到锁说明另一个来源（App 服务 / .bashrc / 另一次手动调用）正在启动。
+  # 这时**不要**再 spawn 一个桥，等它就绪即可——两个桥会互相杀 app-server（E124）。
+  if ! lock_start; then
+    local waitl=0
+    while [ "$waitl" -lt 45 ]; do
+      if health_ok; then
+        hold_wake_lock
+        printf '另一个启动进程已把桥拉起（pid %s）\n%s\n' "$(bridge_pids | tr '\n' ' ')" "$URL"
+        return 0
+      fi
+      sleep 1
+      waitl=$((waitl + 1))
+    done
+    printf '等另一个启动进程 45 秒仍未就绪，日志末尾：\n' >&2
+    tail -n 20 "$LOG_FILE" >&2
+    return 1
+  fi
+  trap 'unlock_start' EXIT INT TERM
+
+  # 拿到锁之后再确认一次：等锁的这段时间里，持锁者可能已经把桥起好了。
+  # 少了这一步，等锁的进程会接着 spawn 第二个桥——正是要消灭的那种并发（E124 实测）。
+  if health_ok; then
+    hold_wake_lock
+    printf '另一个启动进程已把桥拉起（pid %s）\n%s\n' "$(bridge_pids | tr '\n' ' ')" "$URL"
+    unlock_start
+    return 0
+  fi
+
+  # 端口被"冻住的旧桥"占着怎么办（2026-10-16 实测，E140）：
+  # Termux 进程被系统冻结时，监听 socket 还在内核里 —— 连接能建立（由 backlog 完成三次握手），
+  # 但没有代码去 accept，HTTP 永远不会应答。这时 `spawn` 会以
+  # `Failed to start server. Is port 8899 in use?` 失败，而调用方（App / 看门狗）只能干等下一次重试
+  # （实测因此多等 20~30 秒）。
+  #
+  # curl 的退出码正好把两种情况分开：**7 = 连接被拒（端口空着）**，**28 = 连上了但没回应（冻住的监听）**。
+  # 只收掉**属于本项目的** `server.ts` 进程；端口被别人占着就如实报出来，不擅自杀别人的进程。
+  if ! health_ok; then
+    curl -s -m 3 -o /dev/null "$URL/api/health" 2>/dev/null
+    if [ "$?" = 28 ]; then
+      stale="$(bridge_pids | tr '\n' ' ')"
+      if [ -n "$stale" ]; then
+        printf '端口 %s 有人在 listen 但不回 HTTP（很可能是被系统冻结的旧桥），先收掉：%s\n' "$PORT" "$stale"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') stale listener on port $PORT (pids: $stale) — killing before restart" >>"$LOG_FILE"
+        for pid in $stale; do kill "$pid" 2>/dev/null; done
+        sleep 2
+        for pid in $stale; do kill -9 "$pid" 2>/dev/null; done
+        sleep 1
+      else
+        printf '警告：端口 %s 被占着但不应答，且找不到本项目的 server.ts 进程——不擅自杀别的进程。\n' "$PORT" >&2
+        echo "$(date '+%Y-%m-%d %H:%M:%S') port $PORT is occupied by a silent listener that is not ours" >>"$LOG_FILE"
+      fi
+    fi
+  fi
+
+  printf '\n--- %s start ---\n' "$(date '+%Y-%m-%d %H:%M:%S')" >>"$LOG_FILE"
+  setsid bash -c "cd '$APP_DIR' && exec env HOST='$HOST_ADDR' PORT='$PORT' '$BUN' run server.ts" \
+    >>"$LOG_FILE" 2>&1 < /dev/null &
+
+  while [ "$waited" -lt 30 ]; do
+    if health_ok; then
+      # Held for as long as the bridge runs: without it HyperOS freezes this whole
+      # app the moment the browser is in the foreground, and the bridge stops
+      # answering for minutes (measured, see the header).
+      hold_wake_lock
+      printf '已启动（pid %s）\n%s\n日志：%s\n' "$(bridge_pids | tr '\n' ' ')" "$URL" "$LOG_FILE"
+      unlock_start
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  printf '启动后 30 秒内没通过健康检查，日志末尾：\n' >&2
+  tail -n 20 "$LOG_FILE" >&2
+  unlock_start
+  return 1
+}
+
+cmd_stop() {
+  local pids pid killed=0 waited=0 strays
+  # Pair with cmd_start: once nothing is running there is no reason to keep the
+  # wake lock (and its notification) alive.
+  command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock >/dev/null 2>&1
+  pids="$(bridge_pids)"
+  for pid in $pids; do
+    kill "$pid" 2>/dev/null && killed=1
+  done
+
+  if [ "$killed" = 1 ]; then
+    while [ "$waited" -lt 15 ] && [ -n "$(bridge_pids)" ]; do
+      sleep 1
+      waited=$((waited + 1))
+    done
+    for pid in $(bridge_pids); do
+      printf '进程 %s 没退出，强制结束\n' "$pid" >&2
+      kill -9 "$pid" 2>/dev/null
+    done
+    printf '已停止\n'
+  else
+    printf '本来就没在跑\n'
+  fi
+
+  strays="$(stray_app_servers)"
+  if [ -n "$strays" ]; then
+    printf '清理残留的 app-server：%s\n' "$(echo "$strays" | tr '\n' ' ')"
+    # shellcheck disable=SC2086
+    kill $strays 2>/dev/null
+    sleep 1
+  fi
+}
+
+cmd_status() {
+  local pids strays
+  pids="$(bridge_pids)"
+  strays="$(stray_app_servers)"
+  if [ -n "$pids" ]; then
+    printf '桥：运行中（pid %s）\n' "$(echo "$pids" | tr '\n' ' ')"
+    printf '健康检查：%s\n' "$(health_ok && echo 通过 || echo 未通过)"
+    printf '地址：%s\n' "$URL"
+    printf 'app-server：%s\n' "$([ -n "$strays" ] && echo "$(echo "$strays" | wc -l) 个进程" || echo 未发现)"
+    return 0
+  fi
+  printf '桥：未运行\n'
+  [ -n "$strays" ] && printf '残留 app-server（%s 端口）：%s\n' "$WS_PORT" "$(echo "$strays" | tr '\n' ' ')"
+  return 1
+}
+
+case "${1:-start}" in
+  start)   cmd_start ;;
+  stop)    cmd_stop ;;
+  restart)
+    # 停→起整段持锁：否则 App 的 60 秒巡检可能在"刚停、还没起"的窗口插进来，
+    # 于是两个桥互相抢端口、互相杀 app-server（E124）。
+    if lock_start; then
+      cmd_stop
+      cmd_start
+      unlock_start
+    else
+      printf '另一个启动/重启正在进行，等它就绪（最多 60 秒）\n'
+      local w=0
+      while [ "$w" -lt 60 ]; do
+        if health_ok; then printf '就绪\n'; return 0; fi
+        sleep 1
+        w=$((w + 1))
+      done
+      printf '仍没就绪；日志末尾：\n' >&2
+      tail -n 20 "$LOG_FILE" >&2
+      return 1
+    fi
+    ;;
+  status)  cmd_status ;;
+  url)     printf '%s\n' "$URL" ;;
+  log)     shift || true; tail -n 60 ${1:+"$1"} "$LOG_FILE" ;;
+  *)
+    sed -n '2,15p' "$0"
+    exit 1
+    ;;
+esac
