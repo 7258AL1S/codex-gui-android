@@ -161,6 +161,9 @@ fi
 
 ## 7. 构建 APK（在手机上，不用 Gradle/AGP）
 
+> **只是想装现成的？** 到 [Releases](../../releases) 下载最新的 `codexgui-*.apk`，
+> 然后跳到第 8 步。（APK 只是壳，第 1–6 步的 Termux 侧准备仍然必需。）
+
 ### 7.1 装构建工具
 
 ```sh
@@ -290,6 +293,14 @@ node probe/automation-live.mjs          # 真桥端到端：定时任务到点�
 ```
 
 改前端/桥请按 `docs/PATCHES.md` 的顺序重放：`patches/` 里每个脚本都是**幂等**的（重复跑会 `skip`）。
+
+### 发行版（每次更新都要发一版）
+
+```sh
+scripts/release-apk.sh        # 构建 → 提交版本号 → 打 tag → 建 Release → 上传 APK
+```
+
+细节与"发布后自检 30 秒"清单见 `docs/RELEASING.md`。
 
 ---
 

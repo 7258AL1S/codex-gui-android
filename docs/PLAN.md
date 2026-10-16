@@ -367,6 +367,15 @@ FEATURES.md 第 7 节：自建本地调度与持久化（协议无调度接口�
 
 ### P9 前置：WebUI 日常化（用户决策后上移为近期目标）
 
+### P9 交付约定：每次更新都发一版（2026-10-16 用户要求，长期有效）
+
+- [x] **发行流程脚本化**：`~/codex-gui-github/scripts/release-apk.sh`
+      （构建 → 提交 `AndroidManifest` 的版本号 → 打 tag `v<版本>` → 建 Release → 上传 APK），
+      说明里自动写清"这只是壳 / 安装前提 / 自签名与 minSdk"三段，见仓库 `docs/RELEASING.md`
+- [x] **首个发行版**：`v0.3.19`（APK 79,520 B）；从 Releases 下回来核对过
+      **sha256 与本地构建完全一致**、`application-label: 'Codex GUI'`、图标指向自适应图标
+- 以后每次产出新 APK 都要跑一遍这个脚本（APK 不进 git，只作为 Release 资产）
+
 ### 附：E140（2026-10-16，用户"按计划进行"之后插入的收尾项）
 
 - [x] **被冻结的桥：恢复时间 35~78 秒 → 5~8 秒**。根因不在 APK 的探测频率，而在 Termux 侧启动脚本：

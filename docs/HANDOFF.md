@@ -27,6 +27,11 @@
 
 ## 1.5 APK（P9，2026-10-16 起为交付形态）
 
+> **发布约定（用户 2026-10-16 要求，长期有效）：每次产出新 APK 都要发一个 GitHub Release。**
+> 一条命令：`cd ~/codex-gui-github && scripts/release-apk.sh`（构建 → 提交版本号 → 打 tag → 建 Release → 传 APK）。
+> 仓库：<https://github.com/7258AL1S/codex-gui-android>（public，Apache-2.0）。
+> 说明与"发布后自检"清单见仓库的 `docs/RELEASING.md`；**APK 不进 git**，只作为 Release 资产。
+
 > 交付目录（`/sdcard/Download/codex-gui/`）里还有一份面向使用者的
 > **`INSTALL.md`**：安装前提、覆盖安装、回滚、卸载要清什么、四类故障看哪个日志。发给别人/自己重装时先看它。
 
