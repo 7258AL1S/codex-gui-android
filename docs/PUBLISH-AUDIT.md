@@ -52,3 +52,21 @@
 
 第 1 步若失败，最可能是 `app/public/app.bundle.js` 与 `public/*.js` 不一致：重建即可
 （`bun build public/app.js --target=browser --outfile=public/app.bundle.js`）。
+
+**这次已经实际跑过（2026-10-16）**：复制 `app/` 到干净目录 → `npm install`（45 个包）→
+`PORT=8902 bun run server.ts` → `/api/health` 返回 `ready:true`、`/api/setup` 正常；
+`automation.test.mjs` / `settings-live.test.mjs` / `dom-contract-audit.mjs` / `composer-attach-contract.mjs`
+四套全绿；测试实例已停、临时目录已删，作者正在用的桥没被碰。
+
+## 5. 写 README 教程时暴露的三个真问题（都已修）
+
+把"从装 Termux 开始"的每一步写出来时，才发现在本机能跑的东西换台机器就断：
+
+| 问题 | 症状 | 修法 |
+|---|---|---|
+| 桥脚本里**硬编码** `BUN=/data/data/com.termux/files/usr/bin/bun` | 别人机器上路径不同（或只装了 node）→ 起不来 | 改成 `${BUN:-$(command -v bun \|\| command -v node)}`，找不到就报错退出 |
+| APK 签名脚本把**别名/口令写死**（`androiddebugkey` / `android`） | 自己生成密钥的人必须去改脚本 | 参数化为 `CODEXGUI_KEY_ALIAS` / `CODEXGUI_KEYSTORE_PASS` / `CODEXGUI_KEY_PASS`，默认值保持原样 |
+| 教程里写了 `pkg install zipalign` | Termux **没有这个包**（`zipalign` 随 `aapt` 装） | README 已改，并注明 `keytool`/`javac` 来自 `openjdk-21` |
+
+另外把 `APP_DIR` 也做成可覆盖（`CODEX_GUI_APP_DIR`），这样克隆目录不必非叫 `codex-gui`。
+**改完全部复测过**：桥用新脚本重启后 `ready:true`；APK 用参数化脚本重新构建成功（0.3.15）。

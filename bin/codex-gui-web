@@ -33,10 +33,11 @@
 #     一律排除 $$ 与 $PPID。
 set -uo pipefail
 
-APP_DIR="$HOME/codex-gui/app"
+APP_DIR="${CODEX_GUI_APP_DIR:-$HOME/codex-gui/app}"   # 克隆到别处时导出这个变量即可
 STATE_DIR="$HOME/.codex/codex-webui"
 LOG_FILE="$STATE_DIR/bridge.log"
-BUN=/data/data/com.termux/files/usr/bin/bun
+BUN="${BUN:-$(command -v bun || command -v node)}"
+[ -n "$BUN" ] || { printf '找不到 bun 或 node；装一个：pkg install bun\n' >&2; exit 1; }
 HOST_ADDR="${CODEX_GUI_HOST:-127.0.0.1}"
 PORT="${CODEX_GUI_PORT:-8899}"
 WS_PORT=$((PORT + 2))

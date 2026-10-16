@@ -13,6 +13,10 @@ GEN="$PROJ/gen"
 OBJ="$PROJ/obj"
 NAME="codexgui"
 KEYSTORE="${CODEXGUI_KEYSTORE:-$HOME/android-build/CodexBridge/debug.keystore}"
+# 别名/口令可覆盖：自己生成的密钥不一定叫 androiddebugkey、口令也不一定是 android
+KEY_ALIAS="${CODEXGUI_KEY_ALIAS:-androiddebugkey}"
+KEYSTORE_PASS="${CODEXGUI_KEYSTORE_PASS:-android}"
+KEY_PASS="${CODEXGUI_KEY_PASS:-android}"
 SHARE_DIR="/sdcard/Download/codex-gui"
 
 if [ ! -f "$ANDROID_JAR" ]; then
@@ -64,8 +68,8 @@ cp "$OUT/$NAME-unsigned.apk" "$OUT/$NAME.apk"
 ( cd "$OUT" && zip -q -u "$NAME.apk" classes.dex )
 
 echo "[5/6] 签名"
-apksigner sign --ks "$KEYSTORE" --ks-key-alias androiddebugkey \
-  --ks-pass pass:android --key-pass pass:android \
+apksigner sign --ks "$KEYSTORE" --ks-key-alias "$KEY_ALIAS" \
+  --ks-pass "pass:$KEYSTORE_PASS" --key-pass "pass:$KEY_PASS" \
   --out "$ARTIFACT" "$OUT/$NAME.apk"
 
 echo "[6/6] 校验 + 对齐检查"
