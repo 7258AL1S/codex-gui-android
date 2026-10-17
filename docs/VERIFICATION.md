@@ -5075,3 +5075,83 @@ client: fs read -> 200
   （需要一条真正的下载链接或外链；我不想在你手机上乱点陌生链接）。改动本身很小且只影响"原本什么都不发生"的场景。
 - 裸相对路径的判定是**启发式**：要求最后一段带扩展名。所以 `[x](README.md)` 会当文件，
   而 `[x](settings)` 仍按普通链接处理（那更像路由）。边界在探测里写明了。
+
+---
+
+## E144 — 打开长会话一直"Loading conversation"：按**条目**分页，而不是按轮数（patches/0104）【真机验证】
+
+用户报："应用一直在 loading conversation。"
+
+### 1. 量出来的事实
+
+那条会话（调研+设计那一次，143 轮）：
+
+| 指标 | 数值 |
+|---|---|
+| `thread/read` 返回的 JSON | **13.4 MB** |
+| 轮数 / 条目数 / 文本条目 | 143 轮 / **7078 个 item** / 893 条消息 |
+| 文本总字节 | 240 KB（**体积不是文本撑起来的，是条目数**） |
+
+而 `openThread()` 拿到历史后是这么画的：
+
+```js
+for(const turn of thread.turns) renderTurn(turn)      // 143 轮，全部
+```
+
+代码里**本来就有**分页渲染器 `renderThread()`（每页 20 轮 + "Load earlier messages"），
+`openThread` 却没用它 —— 这是第一个错。
+
+### 2. 第一次修（只改轮数分页）**不够**
+
+改成 `renderThread(thread)` 之后真机复测，**仍然卡在 Loading**。加计时日志后拿到：
+
+```
+slow turn render: 367ms items=285
+slow turn render: 1461ms items=153
+…
+renderThread: 20/143 turns, 1425 items, 3253ms
+```
+
+也就是说：**20 轮就有 1425 个 item**，渲染循环 3.2 秒才结束，而这么多 DOM（估算 4 万+ 节点）
+的排版/绘制在手机上还要更久 —— 屏幕一直停在上一帧的 "Loading conversation…"。
+**手机上真正贵的是"条目数/DOM 节点数"，不是"轮数"。**
+
+### 3. 最终修法：给窗口加**条目预算**（`DEFAULT_ITEM_BUDGET = 320`）
+
+`createTurnWindow()` 多一个 `itemBudget` 参数：从**最近的**一轮往回数，累计条目数超过预算就停
+（至少保留一轮）；"Load earlier" 每次也只多排一个预算的量。渲染循环顺带加了
+`renderThread: N/M turns, K items, Xms` 的日志与逐轮慢渲染告警，并且**每轮渲染单独 try/catch**
+（一轮坏掉不再连带整页白屏）。
+
+真机同一会话、同一操作，前后对比：
+
+| | 轮数 | item 数 | 渲染耗时 | 屏幕 |
+|---|---|---|---|---|
+| 改前（全量） | 143 | 7078 | 未跑完（>30s 仍 Loading） | 一直 Loading |
+| 只改轮数分页 | 20 | 1425 | **3253 ms** | 仍停在 Loading |
+| 条目预算（现在） | **5** | **288** | **267 ms** | 正常显示（`~/shots/paging-fix3.png`） |
+
+### 4. 顺手堵住"错误也停在 Loading"
+
+`openThread` 的 catch 原来在 `state.active?.id !== id` 时直接 return，占位文字就永远留在界面上。
+现在：**写明真实错误原因 + 「Retry」按钮**（重试直接再调 `openThread(id, summary)`），并 toast 一条。
+
+### 5. 验证
+
+`probe/thread-paging.test.mjs`（**19 项全过**）：
+
+```
+ok  默认只显示最近一页（20 轮）/ 隐藏 25 轮 / 显示的是最后 20 轮
+ok  Load earlier 之后再往前扩一页
+ok  每轮 70 个 item 时只排预算内的轮数 / 总 item 被压在预算附近 / 最近一轮一定在
+ok  Load earlier 每次也只多排预算内的量
+ok  renderThread 只渲染一页 / 按钮标出隐藏数量 / 点一次扩一页 / 全部展开后按钮消失
+ok  openThread 走分页渲染（不再 for 循环全量 renderTurn）
+ok  加载失败的分支给出原因 + 重试按钮
+```
+
+### 6. 仍未做
+
+- **网络侧还是拿全量**（`thread/read` 13.4 MB）。协议里有 `thread/turns/list` 可以按页取，
+  但需要重写历史加载与合并逻辑；目前 1.7s 的下载 + 解析在真机上可以接受，先把渲染压住。
+- 更彻底的做法是虚拟列表（只渲染视口内的轮次），这次没做。

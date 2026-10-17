@@ -832,6 +832,7 @@ Object.assign(ZH_CN, {
   "Termux:API is missing: no wake lock, no notifications from Termux, and no 15-minute fallback wake-up.": "没装 Termux:API：不会有唤醒锁、不会有 Termux 通知、也没有 15 分钟兜底唤醒。",
   "The run-command permission is not granted: every cold start will briefly switch to Termux.": "没有授予 run-command 权限：每次冷启动都会短暂切到 Termux。",
   "Startup self-check failed": "启动自检失败",
+  "Could not load this conversation": "这条会话没加载出来",
 });
 
 

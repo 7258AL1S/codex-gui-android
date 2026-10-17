@@ -765,6 +765,12 @@ APK 侧（0.3.20，不在前端补丁序列里）：`setDownloadListener` 与 `s
 |---|---|---|
 | 0099 | 「继续某个会话」从**空文本框**改成真的会话选择器：切到该模式时用页面本来就有的 `rpc('thread/list',{limit:50,sortKey:'recency_at',sortDirection:'desc'})` 拉最近 50 条，显示成「标题/预览 · id 前 8 位」；**拉不到就退回手填并写出真实原因**（空下拉框会让人误以为"没有会话"）；提交时没选会话会被拦下；任务行标出「继续会话 <id8>」 | `probe/automation-page.test.mjs` 增到 **46 项**（新增 13 项：选项来自 thread/list、只有预览的会话不显示"未命名"、选择器可见/手填框隐藏、创建请求带对选中 id、拉取失败退回手填并显示 `bridge said no`、空选择被拦下、手填 id 也能提交、任务行显示「继续会话 01a144af」）；真机数据面核对：`thread/list` 返回的 `id`/`name`/`preview`/`status` 字段与选择器用法一致（`name` 可能是 null，已用 preview 兜底） |
 
+## 0104 — 打开长会话不再卡在 "Loading conversation"（E144）
+
+| 补丁 | 内容 | 验证 |
+|---|---|---|
+| 0104 | ① `openThread()` 改用**已有的**分页渲染器 `renderThread()`（原来 `for` 循环把 143 轮全画一遍）；② `createTurnWindow()` 增加**条目预算** `DEFAULT_ITEM_BUDGET=320`——按"item 数"而不是"轮数"收窗口（实测 20 轮就有 1425 个 item，光渲染 3.2s，排版还把首帧拖住）；③ 加载失败不再把占位文字留在界面上，改为写明原因 + 「Retry」；④ `renderThread` 加计时日志（`N/M turns, K items, Xms`、逐轮慢渲染告警）与逐轮 try/catch | `probe/thread-paging.test.mjs` **19 项全过**；真机同一会话：143 轮 → **5 轮 / 288 item / 267 ms**（改前 20 轮/1425 item/3253ms，且屏幕一直 Loading），正常显示（`~/shots/paging-fix3.png`） |
+
 ## 0098 — 上传改成原始字节：更快、且进度条真的会动（E134）
 
 | 补丁 | 内容 | 验证 |

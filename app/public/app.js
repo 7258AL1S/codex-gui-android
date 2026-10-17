@@ -1,4 +1,4 @@
-import { DEFAULT_TURN_PAGE_SIZE, applyComposerSuggestion, createLatestRequestGate, createTurnWindow, createOverlayBackGuard, createSubmitGate, filterAppModels, getComposerAutocomplete, resolveComposerPlaceholder, selectModelState } from './ui-core.js';
+import { DEFAULT_ITEM_BUDGET, DEFAULT_TURN_PAGE_SIZE, applyComposerSuggestion, createLatestRequestGate, createTurnWindow, createOverlayBackGuard, createSubmitGate, filterAppModels, getComposerAutocomplete, resolveComposerPlaceholder, selectModelState } from './ui-core.js';
 import { agentMessageText, isImageReference, renderAssistantMarkdown, renderImagePreview, renderItemImages } from './rendering.js';
 import { codexIcon, hydrateCodexIcons } from './codex-icons.js';
 import { codexInterfaceMark } from './codex-brand.js';
@@ -377,11 +377,37 @@ if(waiting){const badge=document.createElement('span');badge.className='thread-w
 async function openThread(id,fallbackSummary=null){
   const listedSummary=state.threads.find(x=>x.id===id),summary=listedSummary||fallbackSummary,deferTransition=Boolean(fallbackSummary&&!listedSummary);
   if(!deferTransition){resetActiveThreadSync();setActiveTurnId('');rememberActiveThread(id);if(summary){state.active=summary;state.composerMentions=[];state.turnWindow=null;clearConversationRuntime();state.changes.clear();resetReviewState();closeComposerAutocomplete();renderContextTray();renderContextUsage();renderHeader();renderThreads();$('#conversation').innerHTML='<div class="list-state conversation-loading">Loading conversation…</div>'}}
-  try{const loaded=await loadThreadHistory(id),thread={...(summary||{}),...loaded};resetActiveThreadSync();setActiveTurnId('');state.active=thread;rememberActiveThread(thread.id);state.composerMentions=[];state.turnWindow=null;clearConversationRuntime();state.changes.clear();resetReviewState();closeComposerAutocomplete();renderContextTray();renderContextUsage();renderHeader();renderThreads();$('#conversation').innerHTML='';if((thread.turns||[]).length){for(const turn of thread.turns)renderTurn(turn)}else{$('#conversation').innerHTML='<div class="list-state conversation-loading">No conversation history loaded. Send a message to continue.</div>'}scrollOpenedThreadToBottom();scheduleActiveThreadSync(0);void restorePendingRequests();return true}
-  catch(e){clientLog('history load FAILED for '+id+': '+((e&&e.message)||e));if(deferTransition){toast(e?.message||'Could not load side task');return false}if(!summary||state.active?.id!==id)return false;$('#conversation').innerHTML='<div class="list-state conversation-loading">Could not load history. Send a message to start fresh.</div>';return false}}
+  try{const loaded=await loadThreadHistory(id),thread={...(summary||{}),...loaded};resetActiveThreadSync();setActiveTurnId('');state.active=thread;rememberActiveThread(thread.id);state.composerMentions=[];state.turnWindow=null;clearConversationRuntime();state.changes.clear();resetReviewState();closeComposerAutocomplete();renderContextTray();renderContextUsage();renderHeader();renderThreads();$('#conversation').innerHTML='';if((thread.turns||[]).length){
+    // paged-open-thread（patches/0104）：长会话只画最近 DEFAULT_TURN_PAGE_SIZE 轮。
+    // 之前这里把全部轮次一次性 renderTurn —— 实测那条 143 轮 / 13.4 MB 的会话会卡几十秒，
+    // 而 renderThread() 本来就带分页与「Load earlier messages」按钮，只是没被用上。
+    renderThread(thread)
+  }else{$('#conversation').innerHTML='<div class="list-state conversation-loading">No conversation history loaded. Send a message to continue.</div>'}
+  scrollOpenedThreadToBottom();
+scheduleActiveThreadSync(0);void restorePendingRequests();return true}
+  catch(e){
+    const detail=(e&&e.message)||String(e);
+    clientLog('history load FAILED for '+id+': '+detail);
+    if(deferTransition){toast(detail||'Could not load side task');return false}
+    // 失败必须**离开** Loading 状态：写明原因 + 给重试按钮（patches/0104）。
+    // 原来的分支在 state.active.id !== id 时直接 return，占位文字就永远留在那儿了。
+    if(summary&&state.active?.id===id){
+      const box=document.createElement('div');box.className='list-state conversation-loading';
+      box.append(document.createTextNode('Could not load history: '+detail+' '));
+      const retry=document.createElement('button');retry.type='button';retry.className='settings-save';retry.textContent='Retry';
+      retry.onclick=function(){void openThread(id,summary)};
+      box.append(retry);
+      $('#conversation').replaceChildren(box);
+      toast(t('Could not load this conversation')+': '+detail,9000);
+      return false
+    }
+    toast(t('Could not load this conversation')+': '+detail,9000);
+    return false
+  }
+}
 
 function renderHeader(){const t=state.active;if(!t)return;$('#threadTitle').textContent=titleOf(t);if(t.projectless){state.projectless=true;state.workspaceContext=null;$('#projectName').textContent='Tasks';$('#projectPath').textContent='~';$('#threadPath').textContent=''}else{$('#threadPath').textContent=shortPath(t.cwd);setWorkspace(t.cwd||state.config.home)}syncProjectControl();refreshComposerPlaceholder();$('#threadSource').textContent=t.source||'local'}
-function renderThread(thread,loadMore=0){const root=$('#conversation'),turns=thread.turns||[];state.turnWindow=createTurnWindow(turns,DEFAULT_TURN_PAGE_SIZE,state.turnWindow?.threadId===thread.id?state.turnWindow.start:undefined,loadMore);state.turnWindow.threadId=thread.id;clearConversationRuntime();root.innerHTML='';if(state.turnWindow.hiddenCount){const more=document.createElement('button');more.className='load-older';more.textContent=`Load earlier messages (${state.turnWindow.hiddenCount})`;more.onclick=()=>renderThread(thread,DEFAULT_TURN_PAGE_SIZE);root.append(more)}for(const turn of state.turnWindow.visible)renderTurn(turn,root);if(!root.children.length)showEmpty();else if(!loadMore)scrollBottom()}
+function renderThread(thread,loadMore=0){const root=$('#conversation'),turns=thread.turns||[];state.turnWindow=createTurnWindow(turns,DEFAULT_TURN_PAGE_SIZE,state.turnWindow?.threadId===thread.id?state.turnWindow.start:undefined,loadMore,DEFAULT_ITEM_BUDGET);state.turnWindow.threadId=thread.id;clearConversationRuntime();root.innerHTML='';if(state.turnWindow.hiddenCount){const more=document.createElement('button');more.className='load-older';more.textContent=`Load earlier messages (${state.turnWindow.hiddenCount})`;more.onclick=()=>renderThread(thread,DEFAULT_TURN_PAGE_SIZE);root.append(more)}const startedAt=Date.now();let itemCount=0;for(const turn of state.turnWindow.visible){const turnStartedAt=Date.now();itemCount+=(turn.items||[]).length;try{renderTurn(turn,root)}catch(error){clientLog('turn render FAILED: '+((error&&error.message)||error))}const cost=Date.now()-turnStartedAt;if(cost>150)clientLog('slow turn render: '+cost+'ms items='+((turn.items||[]).length))}clientLog('renderThread: '+state.turnWindow.visible.length+'/'+turns.length+' turns, '+itemCount+' items, '+(Date.now()-startedAt)+'ms');if(!root.children.length)showEmpty();else if(!loadMore)scrollBottom()}
 function showEmpty(){const root=$('#conversation'),project=state.projectless?null:(state.workspaceContext?.project||$('#projectName').textContent?.trim());root.innerHTML=`<div class="empty-state" id="emptyState">${codexInterfaceMark('empty-codex-mark')}<h1>${project?`What can I help with in ${escapeHtml(project)}?`:'What can I help?'}</h1></div>`}
 function ensureTurnTimeline(turnId,root=$('#conversation')){let turn=state.turns.get(turnId);if(turn?.isConnected)return turn;turn=document.createElement('article');turn.className='turn assistant-turn native-turn-timeline';turn.dataset.turnId=turnId;turn.innerHTML='<div class="assistant-body"><div class="turn-event-stream"></div></div><div class="worked-for-divider" data-worked-for-divider hidden><span>Worked</span><div></div></div><div class="turn-final-slot"></div>';root.append(turn);state.turns.set(turnId,turn);state.dividers.set(turnId,turn.querySelector('[data-worked-for-divider]'));return turn}
 function formatWorkedDuration(durationMs){if(!Number.isFinite(durationMs)||durationMs<1000)return null;const seconds=Math.max(1,Math.round(durationMs/1000));if(seconds<60)return`${seconds}s`;const minutes=Math.floor(seconds/60),rest=seconds%60;return rest?`${minutes}m ${rest}s`:`${minutes}m`}

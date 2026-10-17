@@ -1,5 +1,7 @@
+# 上游把前端产物忽略了（因为它是构建出来的）。但本项目的 APK/浏览器**直接靠桥托管这个文件**，
+# 没有它页面就是白的 —— 所以这里显式提交它（见 README「从源码跑」；改了 public/*.js 记得重建）。
 node_modules/
-public/app.bundle.js
+!public/app.bundle.js
 docs/app-server-schema/
 .artifacts/
 /index.html

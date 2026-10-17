@@ -1,4 +1,8 @@
 export const DEFAULT_TURN_PAGE_SIZE = 20;
+// 一次最多排多少个 item。手机上真正贵的不是"轮数"而是"DOM 节点数"：
+// 实测那条 143 轮的会话里 20 轮就有 1425 个 item，渲染循环 3.2 秒结束后，
+// 首帧排版/绘制还要很久 —— 界面就一直停在 "Loading conversation…"。
+export const DEFAULT_ITEM_BUDGET = 320;
 
 export function createLatestRequestGate() {
   let generation = 0;
@@ -8,12 +12,32 @@ export function createLatestRequestGate() {
   };
 }
 
-export function createTurnWindow(turns, pageSize = DEFAULT_TURN_PAGE_SIZE, currentStart, loadMore = 0) {
-  const total = Array.isArray(turns) ? turns.length : 0;
+function itemsIn(turn) {
+  // 没有 items 的轮次也按 1 个算：否则纯文本轮次会被"预算无限"地全排出来。
+  const count = Array.isArray(turn?.items) ? turn.items.length : 0;
+  return Math.max(1, count);
+}
+
+export function createTurnWindow(turns, pageSize = DEFAULT_TURN_PAGE_SIZE, currentStart, loadMore = 0, itemBudget = DEFAULT_ITEM_BUDGET) {
+  const list = Array.isArray(turns) ? turns : [];
+  const total = list.length;
   const safePage = Math.max(1, pageSize);
-  const baseStart = currentStart == null ? Math.max(0, total - safePage) : Math.max(0, Math.min(currentStart, total));
-  const start = Math.max(0, baseStart - Math.max(0, loadMore));
-  return { visible: turns.slice(start), hiddenCount: start, start, total };
+  const budget = Math.max(0, Number(itemBudget) || 0);
+  // 首次打开：从尾部取一页；"Load earlier"：从当前起点再往前扩。
+  const anchor = currentStart == null ? total : Math.max(0, Math.min(currentStart, total));
+  let start = Math.max(0, anchor - safePage);
+  if (budget > 0) {
+    let items = 0;
+    for (let i = anchor - 1; i >= start; i--) {
+      items += itemsIn(list[i]);
+      // 至少保留一轮；超预算就停在下一轮（保住"最近的"这一侧）。
+      if (items > budget && i < anchor - 1) {
+        start = i + 1;
+        break;
+      }
+    }
+  }
+  return { visible: list.slice(start), hiddenCount: start, start, total };
 }
 
 export function selectModelState(models, requestedModel) {
